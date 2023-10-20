@@ -107,17 +107,39 @@ class FtApiHydra(ApiHydra):
         app_ids = [app_data['id'] for app_data in apps_data if 'id' in app_data]
         return app_ids
 
+    def get_token(self, uid: str, secret: str):
+        resp = requests.post('https://api.intra.42.fr/oauth/token', data={
+            'grant_type': 'client_credentials',
+            'client_id': uid,
+            'client_secret': secret,
+        })
+        if resp.status_code == 200:
+            return resp.json()['access_token']
+        return ''
+
     def update(self):
         app_ids = self.get_app_ids()
         for app_id in app_ids:
             uid, secret = self.get_credentials(app_id)
+            token = self.get_token(uid, secret)
             self.log(f'{app_id=}', 3)
             self.log(f'{uid=}', 2)
             self.log(f'{secret=}', 2)
+            self.log(f'{token=}', 2)
             self.apps[app_id]['uid'] = uid
             self.apps[app_id]['secret'] = secret
+            self.apps[app_id]['token'] = token
             if 'last_request' not in self.apps[app_id]:
                 self.apps[app_id]['last_request'] = 0
+
+    def get(self, url: str):
+        app_id = list(self.apps)[0]
+        token = self.apps[app_id]['token']
+        print(f'Bearer {token}')
+        resp = requests.get(url, headers={
+            'Authorization': f'Bearer {token}',
+        })
+        return resp.json()
 
 def main() -> int:
     load_dotenv()
@@ -126,9 +148,8 @@ def main() -> int:
     INTRA_PW = b64decode(INTRA_PW_B64.encode()).decode()
 
     hydra = FtApiHydra(INTRA_LOGIN, INTRA_PW, log_level=1)
-    hydra.update()
-    for app_id, app_data in hydra.apps.items():
-        print(app_id, app_data)
+    # hydra.update()
+    print(hydra.get('https://api.intra.42.fr/v2/users/tischmid'))
     return 0
 
 if __name__ == '__main__':
