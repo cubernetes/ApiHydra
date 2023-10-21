@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import re
 import os
 import sys
 import json
@@ -28,6 +29,7 @@ class FtApiHydra(ApiHydra):
             self,
             intra_login: str,
             intra_password: str,
+            max_retries: int=50,
             log_level: int=1,
             log_file: TextIO=sys.stdout,
             intra_apps_file_path: str='./intra_apps.json'
@@ -40,6 +42,7 @@ class FtApiHydra(ApiHydra):
         self.app_idx = 0
         self.responses = []
         self.threads = []
+        self.max_retries = max_retries
         try:
             with open(self.intra_apps_file_path, 'r') as intra_apps_file:
                 try:
@@ -137,10 +140,28 @@ class FtApiHydra(ApiHydra):
             if 'last_request' not in self.apps[app_id]:
                 self.apps[app_id]['last_request'] = 0
 
-    def _get(self, *args, **kwargs):
-        resp = requests.get(*args, **kwargs)
-        if resp.status_code == 200:
-            self.responses.append(resp.json())
+    def _get(self, *args) -> None:
+        if not args:
+            self.log(f"requests.get requires one positional arguments (url)", 1)
+            return ;
+        retry = 0
+        delay = 1 / len(self.apps)
+        while True:
+            if retry > self.max_retries:
+                return ;
+            app_id = list(self.apps)[self.app_idx % len(self.apps)]
+            self.app_idx += 1
+            token = self.apps[app_id]['token']
+            resp = requests.get(*args, headers={'Authorization': f'Bearer {token}'})
+            if resp.status_code == 200:
+                self.log(f'\033[32mGetting data: {args[0]}\033[m', 3)
+                self.responses.append(resp.json())
+                return ;
+            else:
+                self.log(f"\033[31mCouldn't get {args[0]} ({resp.status_code}) (retry: {retry}).\033[m", 1)
+                time.sleep(delay)
+                delay *= 1.2
+            retry += 1
 
     def join(self):
         self.log('Starting threads', 2)
@@ -152,15 +173,14 @@ class FtApiHydra(ApiHydra):
         self.log('All threads joined', 2)
 
     def get(self, url: str):
-        app_id = list(self.apps)[self.app_idx % len(self.apps)]
-        self.app_idx += 1
-        token = self.apps[app_id]['token']
-        self.log(f'Bearer {token}', 2)
         self.threads.append(
-            threading.Thread(target=self._get, args=(url,), kwargs={'headers': {'Authorization': f'Bearer {token}'}})
+            threading.Thread(target=self._get, args=(url,))
         )
-        delay = 1 / len(self.apps)
-        time.sleep(delay)
+        time.sleep(1 / len(self.apps))
+
+def load_users_from_file(file_name: str) -> list[str]:
+    with open(file_name, 'r', encoding='utf-8') as f:
+        return list(map(str.strip, re.sub(r'\n+', r'\n', f.read()).splitlines()))
 
 def main() -> int:
     load_dotenv()
@@ -168,197 +188,19 @@ def main() -> int:
     INTRA_PW_B64 = os.environ.get('INTRA_PW_B64', '')
     INTRA_PW = b64decode(INTRA_PW_B64.encode()).decode()
 
-    hydra = FtApiHydra(INTRA_LOGIN, INTRA_PW, log_level=3)
-    hydra.update()
+    hydra = FtApiHydra(INTRA_LOGIN, INTRA_PW, max_retries=100, log_level=3)
+    # hydra.update()
 
-    logins = [
-        'asax',
-        'fhristov',
-        'sijajula',
-        'vietran',
-        'omehdiza',
-        'emnikoll',
-        'enikolla',
-        'rgarancs',
-        'ragaranc',
-        'emenikol',
-        'pakrasze',
-        'aidries',
-        'paukrasz',
-        'pkraszew',
-        'emelniko',
-        'ikabbous',
-        'kmatulia',
-        'smancina',
-        'prathore',
-        'takalin',
-        'besavick',
-        'visommer',
-        'ahodis',
-        'katef',
-        'mslepety',
-        'ushahid',
-        'llazdane',
-        'jisyoo',
-        'arustamo',
-        'hsmirnov',
-        'todic',
-        'ddodul',
-        'tsarac',
-        'hnassar',
-        'aomar',
-        'dskorokh',
-        'mokorie',
-        'akaoud',
-        'lzena',
-        'dogundip',
-        'ipappa',
-        'paulkras',
-        'egrinche',
-        'tikehara',
-        'cmichida',
-        'grandall',
-        'osly',
-        'mkommrow',
-        'jmariane',
-        'bkretzsc',
-        'hakumar',
-        'kmatiash',
-        'hai',
-        'hparoei',
-        'swittsto',
-        'gcoustie',
-        'luvascon',
-        'aliribei',
-        'mfruhlin',
-        'cmittal',
-        'sshabash',
-        'gnorton',
-        'kkonkel',
-        'gbrown',
-        'dkoca',
-        'sgangal',
-        'vhodis',
-        'jivdris',
-        'bakcakoy',
-        'ahidries',
-        'mojradi',
-        'agavrilo',
-        'depierso',
-        'ykumar',
-        'lmackel',
-        'jclark',
-        'pevtimov',
-        'vkhmalad',
-        'rsavchuk',
-        'lsaikosk',
-        'bortgies',
-        'mfaxel',
-        'vbacanin',
-        'nmakhadz',
-        'mkaisero',
-        'geherman',
-        'azahorod',
-        'aal-mali',
-        'busonmez',
-        'erosas-q',
-        'tvideva',
-        'jbarisic',
-        'pherrman',
-        'dskoryko',
-        'bnycz',
-        'dtaneski',
-        'cpisca',
-        'klitson',
-        'klakatos',
-        'dtunte',
-        'okondako',
-        'beromero',
-        'gvelasco',
-        'jbyrne',
-        'glromano',
-        'akarageo',
-        'rebrahim',
-        'viettran',
-        'beasavic',
-        'lherrgut',
-        'ommehdiz',
-        'aschenk',
-        'vvishnio',
-        'dzubkova',
-        'screimer',
-        'mwarmbie',
-        'fvargas',
-        'mbaskara',
-        'emelinik',
-        'nholbroo',
-        'ansax',
-        'ademarti',
-        'lworden',
-        'reldahli',
-        'siran',
-        'cchamorr',
-        'sbollige',
-        'paribeir',
-        'vkuzema',
-        'nandreev',
-        'yayildir',
-        'rbielski',
-        'ralgaran',
-        'drabadan',
-        'fmiller',
-        'lfrolova',
-        'nghashgh',
-        'pgkika',
-        'asplavni',
-        'fhanke',
-        'pnickl',
-        'nbachir',
-        'kperova',
-        'smintah',
-        'mitadic',
-        'iverniho',
-        'hzimmerm',
-        'evan-ite',
-        'stobin',
-        'maweiss',
-        'jdach',
-        'mleenhar',
-        'skoehn-h',
-        'egherca',
-        'bfallah-',
-        'sgramsch',
-        'alandsbe',
-        'rohoffma',
-        'aafuni',
-        'gsuhr',
-        'bautret',
-        'fibarros',
-        'oleung',
-        'lwei',
-        'bsaager',
-        'sisjajul',
-        'fihristo',
-        'fwulf',
-        'ldude',
-        'kwurster',
-        'kokaimov',
-        'mmejbar',
-        'jstrozyk',
-        'lbrusa',
-        'abillote',
-        'abeiers',
-        'malo-tru',
-        'zblume',
-        'nam-vu',
-        'dtolmaco',
-    ]
+    logins = load_users_from_file('../42_users/all_logins_berlin.txt')
 
     for login in logins:
         hydra.get(f'https://api.intra.42.fr/v2/users/{login}')
 
     hydra.join()
-    print(json.dumps(hydra.responses, indent=4))
+    print()
+    with open('./output3.json', 'w') as f:
+        json.dump(hydra.responses, f, indent=4)
+    print('Done')
     return 0
 
 if __name__ == '__main__':
