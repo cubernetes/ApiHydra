@@ -2,6 +2,7 @@
 
 import os
 import re
+import json
 import logging
 from base64 import b64decode
 
@@ -20,33 +21,42 @@ def main() -> int:
 
     hydra = FtApiHydra(
         max_retries=100,
-        log_level=logging.DEBUG,
+        log_level=logging.INFO,
         intra_login=INTRA_LOGIN,
         intra_password=INTRA_PW,
     )
     # hydra.update()
-    hydra.refresh_tokens()
+    # hydra.refresh_tokens()
 
-    hydra.get(f'https://api.intra.42.fr/v2/campus?per_page=100&page=1')
+    print('Getting campuses')
+    hydra.clear_responses()
+    hydra.get(f'/campus?per_page=100&page=1')
 
     resps = hydra.get_responses()
-
-    for resp in resps:
-        print(resp)
-
-    return 0
-
-    logins = load_users_from_file('../42_users/all_logins_berlin.txt')
-    logins = logins[:200]
-
-    for login in logins:
-        hydra.get(f'https://api.intra.42.fr/v2/users/{login}')
-
-    hydra.join()
-    print()
-    with open('./output4.json', 'w') as f:
-        json.dump(hydra.responses, f, indent=4)
     print('Done')
+
+    resp = resps[0]
+    campuses = resp[1].json()
+    campus_ids = [campus['id'] for campus in campuses]
+
+    print('Getting users per campus')
+    hydra.clear_responses()
+    for i, campus_id in enumerate(campus_ids):
+        print(end=f'\r{i+1}/{len(campus_ids)}: {campus_id=}' + ' '*10)
+        hydra.get(f'/campus/{campus_id}/users?per_page=100&page=1')
+    print()
+
+    data = []
+
+    resps = hydra.get_responses()
+    print('Done')
+    for url, resp in resps:
+        d = resp.json()
+        data.append((url, d))
+
+    with open('./output.json', 'w', encoding='utf-8') as output_file_writer:
+        json.dump(data, output_file_writer, indent=4, ensure_ascii=False, sort_keys=True)
+
     return 0
 
 if __name__ == '__main__':
