@@ -19,12 +19,21 @@ def main() -> int:
     INTRA_PW = b64decode(INTRA_PW_B64.encode()).decode()
 
     hydra = FtApiHydra(
-        INTRA_LOGIN,
-        INTRA_PW,
         max_retries=100,
-        log_level=logging.INFO
+        log_level=logging.DEBUG,
+        intra_login=INTRA_LOGIN,
+        intra_password=INTRA_PW,
     )
     # hydra.update()
+    hydra.refresh_tokens()
+
+    hydra.get(f'https://api.intra.42.fr/v2/campus?per_page=100&page=1')
+
+    resps = hydra.get_responses()
+
+    for resp in resps:
+        print(resp)
+
     return 0
 
     logins = load_users_from_file('../42_users/all_logins_berlin.txt')

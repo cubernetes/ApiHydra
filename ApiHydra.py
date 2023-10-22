@@ -5,9 +5,10 @@ import json
 import time
 import requests
 import threading
-from abc import ABC, abstractmethod
 from typing import Any, TextIO
 from collections import defaultdict
+from abc import ABC, abstractmethod
+import logging
 from logging import DEBUG, INFO, WARNING, ERROR, FATAL
 
 from bs4 import BeautifulSoup, Tag
@@ -18,6 +19,7 @@ DEFAULT_APPS_FILE = './apps.json'
 class ApiHydra(ABC):
     def __init__(
         self,
+        *,
         log_level: int=INFO,
         log_file: TextIO=sys.stdout,
         max_retries: int=50,
@@ -44,23 +46,23 @@ class ApiHydra(ABC):
             with open(apps_file, 'r', encoding='utf-8') as apps_file_reader:
                 try:
                     self.apps = defaultdict(dict, json.load(apps_file_reader))
-                except json.decoder.JSONDecodeError:
-                    self.log(f'Could not deserialize from "{apps_file}" (JSONDecodeError).', ERROR)
-        except IOError:
-            self.log(f'Could not open "{apps_file}" for reading.', WARNING)
+                except json.decoder.JSONDecodeError as exc:
+                    self.log(f'Could not deserialize from "{apps_file}" ({exc}).', ERROR)
+        except IOError as exc:
+            self.log(f'Could not open "{apps_file}" for reading ({exc}).', WARNING)
 
     def serialize(self, apps_file: str=DEFAULT_APPS_FILE):
         self.log(f'Serializing app credentials to "{apps_file}".', INFO)
         try:
             with open(apps_file, 'w', encoding='utf-8') as apps_file_writer:
                 try:
-                    json.dump(self.apps, apps_file_writer, indent=4, ensure_ascii=False)
-                except TypeError:
-                    self.log(f'Could not serialize self.apps.', FATAL)
+                    json.dump(self.apps, apps_file_writer, indent=4, ensure_ascii=False, sort_keys=True)
+                except TypeError as exc:
+                    self.log(f'Could not serialize self.apps ({exc}).', FATAL)
                     self.log(f'Dump of self.apps:', FATAL)
                     self.log(f'{self.apps}', FATAL)
-        except IOError:
-            self.log(f'Could not open "{apps_file}" for writing.', FATAL)
+        except IOError as exc:
+            self.log(f'Could not open "{apps_file}" for writing ({exc}).', FATAL)
             self.log(f'Dump of self.apps:', FATAL)
             self.log(f'{self.apps}', FATAL)
 
@@ -72,7 +74,7 @@ class ApiHydra(ABC):
             clr_rst = ''
             ansi = ''
         if log_level == DEBUG:
-            ansi = '\033\x5b37m' # grey
+            ansi = '\033\x5b36m' # grey
         elif log_level == INFO:
             ansi = '\033\x5b0m' # Default/white
         elif log_level == WARNING:
@@ -84,7 +86,7 @@ class ApiHydra(ABC):
         else:
             clr_rst = ''
             ansi = ''
-        print(f'[{self.__class__.__name__}, {log_level}] {ansi}{msg}{clr_rst}', file=self.log_file, flush=True)
+        print(f'{ansi}[{self.__class__.__name__}, {logging.getLevelName(log_level):>10}] {msg}{clr_rst}', file=self.log_file, flush=True)
 
     def get_next_app(self):
         app_id = list(self.apps)[self.app_idx % len(self.apps)]
@@ -101,7 +103,7 @@ class ApiHydra(ABC):
            This shall be a transparent method, do not call it directly.
         """
         if not args and 'url' not in kwargs:
-            self.log(f'Call to {self.__class__.__name__}._get requires at least url argument (either as 1st arg or as kwarg).', ERROR)
+            self.log(f'Thread {threading.get_ident():>16}: Call to {self.__class__.__name__}._get requires at least url argument (either as 1st arg or as kwarg).', ERROR)
             return;
         elif 'url' in kwargs:
             url = kwargs['url']
@@ -111,17 +113,17 @@ class ApiHydra(ABC):
         delay = 1 / len(self.apps)
         while True:
             if retries > self.max_retries:
-                self.log(f'Data loss: get request to "{url}" and args "{args=}" "{kwargs=}" exceeded max retries ({self.max_retries}).', ERROR)
+                self.log(f'Thread {threading.get_ident():>16}: Data loss: get request to "{url}" and "{args=}", "{kwargs=}" exceeded max retries ({self.max_retries}).', ERROR)
                 return;
             app = self.get_next_app()
             kwargs = self.make_request_kwargs_from_app(app, **kwargs)
             resp = requests.get(*args, **kwargs)
             if resp.status_code == 200:
-                self.log(f'Successful get: "{url}"', DEBUG)
+                self.log(f'Thread {threading.get_ident():>16}: Successful get: "{url}".', DEBUG)
                 self.responses.append(resp)
                 return;
             else:
-                self.log(f'Could not get "{url}" ({resp.status_code}) (retries: {retries}).', DEBUG)
+                self.log(f'Thread {threading.get_ident():>16}: Could not get "{url}" ({resp.status_code}) (retries: {retries}).', DEBUG)
                 time.sleep(delay)
                 delay *= self.retry_delay_factor
             retries += 1
@@ -129,10 +131,15 @@ class ApiHydra(ABC):
     def join(self):
         """Wait for all threads to finish.
         """
-        self.log('Joining threads...', INFO)
+        self.log(f'Joining threads...', INFO)
         for thread in self.threads:
             thread.join()
-        self.log('All threads joined.', INFO)
+        self.log(f'All threads joined.', INFO)
+
+    def get_responses(self):
+        self.join()
+        self.log(f'Returning responses.', DEBUG)
+        return self.responses
 
     def get(self, *args, **kwargs):
         """Construct a list of threads that will be started immediately,
@@ -140,6 +147,7 @@ class ApiHydra(ABC):
            rate limiting. Caller can wait for all threads to finish by calling
            self.join.
         """
+        self.log(f'Creating new thread with function self._get and "{args=}", "{kwargs=}".', DEBUG)
         self.threads.append(
             threading.Thread(target=self._get, args=args, kwargs=kwargs)
         )
@@ -150,22 +158,24 @@ class ApiHydra(ABC):
 class FtApiHydra(ApiHydra):
     def __init__(
             self,
-            intra_login: str,
-            intra_password: str,
+            *,
+            log_level: int=INFO,
+            log_file: TextIO=sys.stdout,
             max_retries: int=50,
             retry_delay_factor: float=1.1,
-            log_level: int=1,
-            log_file: TextIO=sys.stdout,
             apps_file: str=DEFAULT_APPS_FILE,
+            intra_login: str,
+            intra_password: str,
         ) -> None:
         super().__init__(
-            log_level,
-            log_file,
-            max_retries,
-            retry_delay_factor,
-            apps_file,
+            log_level=log_level,
+            log_file=log_file,
+            max_retries=max_retries,
+            retry_delay_factor=retry_delay_factor,
+            apps_file=apps_file,
         )
-        self.session = self.create_intra_session(intra_login, intra_password)
+        self.intra_login = intra_login
+        self.intra_password = intra_password
 
     def make_request_kwargs_from_app(self, app: dict, **kwargs) -> dict[str, Any]:
         app_id = app.get('id', '')
@@ -184,6 +194,7 @@ class FtApiHydra(ApiHydra):
     def create_intra_session(self, intra_login: str, intra_password: str) -> requests.Session:
         sign_in_page_url = 'https://profile.intra.42.fr/users/auth/keycloak_student'
         callback_url = 'https://profile.intra.42.fr/users/auth/keycloak_student/callback'
+        self.log(f'Creating Intra session...', INFO)
         session = requests.Session()
         self.log(f'Getting sign in page ({sign_in_page_url}).', DEBUG)
         r_initial = session.get(sign_in_page_url)
@@ -192,13 +203,13 @@ class FtApiHydra(ApiHydra):
         element = soup.find(id='kc-form-login')
         authenticate_url = element.attrs.get('action', '') if isinstance(element, Tag) else ''
         if not authenticate_url:
-            self.log('Could not extract authentication url (empty).', ERROR)
+            self.log(f'Could not extract authentication url (empty).', ERROR)
             return session
         self.log(f'Posting to authentication url ({authenticate_url}).', DEBUG)
         session.post(authenticate_url, data={'username': intra_login, 'password': intra_password})
         self.log(f'Getting callback url ({callback_url}).', DEBUG)
         session.get(callback_url)
-        self.log('Intra session creation successful. Returning session.', INFO)
+        self.log(f'Intra session creation successful. Returning session.', INFO)
         return session
 
     def get_token(self, uid: str, secret: str):
@@ -208,7 +219,9 @@ class FtApiHydra(ApiHydra):
             'client_secret': secret,
         })
         if resp.status_code == 200:
-            return resp.json()['access_token']
+            resp = resp.json()
+            self.log(f'{resp=}', DEBUG)
+            return resp['access_token']
         return ''
 
     def get_credentials(self, app_id: str) -> tuple[str, str]:
@@ -229,32 +242,38 @@ class FtApiHydra(ApiHydra):
         return '', ''
 
     def get_app_ids(self) -> list[str]:
-        self.log('Getting app ids.', DEBUG)
+        self.log(f'Getting app ids.', DEBUG)
         resp = self.session.get(f'https://profile.intra.42.fr/oauth/applications')
         if resp.status_code != 200:
-            self.log('Could not get apps overview page.', ERROR)
+            self.log(f'Could not get apps overview page.', ERROR)
             return []
         html = resp.text
         soup = BeautifulSoup(html, 'html.parser')
         apps_root = soup.find('div', class_='apps-root')
-        self.log(f'{apps_root=}', 3)
         apps_data = apps_root.get('data', '[]') if isinstance(apps_root, Tag) else []
-        self.log(f'{apps_data}', 3)
         apps_data = json.loads(apps_data) if isinstance(apps_data, str) else []
-        self.log(f'{apps_data=}', 3)
-        app_ids = [app_data['id'] for app_data in apps_data if 'id' in app_data]
+        app_ids = [str(app_data['id']) for app_data in apps_data if 'id' in app_data]
         return app_ids
 
+    def refresh_tokens(self):
+        for app_id, app_creds in self.apps.items():
+            self.log(f'Refreshing token for app "{app_id}".', INFO)
+            uid = app_creds['uid']
+            secret = app_creds['secret']
+            token = self.get_token(uid, secret)
+            self.log(f'- {token=}\n', DEBUG)
+            self.apps[app_id]['token'] = token
+
     def update(self):
+        self.session = self.create_intra_session(self.intra_login, self.intra_password)
         app_ids = self.get_app_ids()
         for app_id in app_ids:
             uid, secret = self.get_credentials(app_id)
             token = self.get_token(uid, secret)
-            self.log(f'Updating apps list:', DEBUG)
-            self.log(f'-{app_id=}', DEBUG)
-            self.log(f'-{uid=}', DEBUG)
-            self.log(f'-{secret=}', DEBUG)
-            self.log(f'-{token=}', DEBUG)
+            self.log(f'Adding app "{app_id}" to apps list.', INFO)
+            self.log(f'- {uid=}', DEBUG)
+            self.log(f'- {secret=}', DEBUG)
+            self.log(f'- {token=}\n', DEBUG)
             self.apps[app_id]['uid'] = uid
             self.apps[app_id]['secret'] = secret
             self.apps[app_id]['token'] = token
