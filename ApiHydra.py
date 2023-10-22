@@ -28,7 +28,7 @@ class FtApiHydra(ApiHydra):
             max_retries: int=50,
             log_level: int=1,
             log_file: TextIO=sys.stdout,
-            intra_apps_file_path: str='./intra_apps.json'
+            intra_apps_file_path: str='./apps.json'
         ) -> None:
         super().__init__(log_level, log_file)
         self.session = self.create_intra_session(intra_login, intra_password)
