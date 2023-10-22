@@ -154,11 +154,11 @@ class FtApiHydra(ApiHydra):
             token = self.apps[app_id]['token']
             resp = requests.get(*args, headers={'Authorization': f'Bearer {token}'})
             if resp.status_code == 200:
-                self.log(f'\033[32mGetting data: {args[0]}\033[m', 3)
+                self.log(f'\033\x5b32mGetting data: {args[0]}\033\x5bm', 3)
                 self.responses.append(resp.json())
                 return ;
             else:
-                self.log(f"\033[31mCouldn't get {args[0]} ({resp.status_code}) (retry: {retry}).\033[m", 1)
+                self.log(f"\033\x5b31mCouldn't get {args[0]} ({resp.status_code}) (retry: {retry}).\033\x5bm", 1)
                 time.sleep(delay)
                 delay *= 1.2
             retry += 1
@@ -189,16 +189,17 @@ def main() -> int:
     INTRA_PW = b64decode(INTRA_PW_B64.encode()).decode()
 
     hydra = FtApiHydra(INTRA_LOGIN, INTRA_PW, max_retries=100, log_level=3)
-    # hydra.update()
+    hydra.update()
 
     logins = load_users_from_file('../42_users/all_logins_berlin.txt')
+    logins = logins[:200]
 
     for login in logins:
         hydra.get(f'https://api.intra.42.fr/v2/users/{login}')
 
     hydra.join()
     print()
-    with open('./output3.json', 'w') as f:
+    with open('./output4.json', 'w') as f:
         json.dump(hydra.responses, f, indent=4)
     print('Done')
     return 0
