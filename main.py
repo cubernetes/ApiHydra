@@ -2,6 +2,7 @@
 
 import os
 import re
+import logging
 from base64 import b64decode
 
 from dotenv import load_dotenv
@@ -17,8 +18,13 @@ def main() -> int:
     INTRA_PW_B64 = os.environ.get('INTRA_PW_B64', '')
     INTRA_PW = b64decode(INTRA_PW_B64.encode()).decode()
 
-    hydra = FtApiHydra(INTRA_LOGIN, INTRA_PW, max_retries=100, log_level=3)
-    hydra.update()
+    hydra = FtApiHydra(
+        INTRA_LOGIN,
+        INTRA_PW,
+        max_retries=100,
+        log_level=logging.INFO
+    )
+    # hydra.update()
     return 0
 
     logins = load_users_from_file('../42_users/all_logins_berlin.txt')
