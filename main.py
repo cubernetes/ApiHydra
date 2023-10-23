@@ -40,20 +40,35 @@ def main() -> int:
     campus_ids = [campus['id'] for campus in campuses]
 
     print('Getting users per campus')
+    per_page = 100
+    page = 1
+
     hydra.clear_responses()
     for i, campus_id in enumerate(campus_ids):
         print(end=f'\r{i+1}/{len(campus_ids)}: {campus_id=}' + ' '*10)
-        hydra.get(f'/campus/{campus_id}/users?per_page=100&page=1')
+        hydra.get(f'/campus/{campus_id}/users?per_page={per_page}&page={page}')
+    page += 1
     print()
 
     data = []
 
-    resps = hydra.get_responses()
-    print('Done')
-    for url, resp in resps:
-        d = resp.json()
-        data.append((url, d))
+    paginated = True
+    while paginated:
+        resps = hydra.get_responses_copy()
+        hydra.clear_responses()
+        paginated = False
+        for i, (url, resp) in enumerate(resps):
+            resp = resp.json()
+            data.append((url, resp))
+            if len(resp) == per_page:
+                paginated = True
+                campus_id = url.split('/campus/', 1)[1].split('/', 1)[0]
+                print(end=f'\r{i+1}/{len(resps)} {campus_id=}' + ' '*10)
+                hydra.get(f'/campus/{campus_id}/users?per_page={per_page}&page={page}')
+        print()
+        page += 1
 
+    print('Done')
     with open('./output.json', 'w', encoding='utf-8') as output_file_writer:
         json.dump(data, output_file_writer, indent=4, ensure_ascii=False, sort_keys=True)
 
