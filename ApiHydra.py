@@ -29,14 +29,18 @@ class ApiHydra(ABC):
         api_base: str,
         log_level: int=INFO,
         log_file: TextIO=sys.stdout,
+        stats: bool=False,
         max_retries: int=50,
+        requests_per_second: float=1/4,
         retry_delay_factor: float=1.1,
         apps_file: str=DEFAULT_APPS_FILE,
     ) -> None:
         self.api_base = api_base
         self.log_level = log_level
         self.log_file = log_file
+        self.stats = stats
         self.max_retries = max_retries
+        self.requests_per_second = requests_per_second
         self.retry_delay_factor = retry_delay_factor
         self.apps_file = apps_file
         self.apps = defaultdict(dict)
@@ -52,12 +56,13 @@ class ApiHydra(ABC):
 
     def __del__(self):
         self.serialize(self.apps_file)
-        self.log(f'Statistics:', DEBUG)
-        self.log(f'- {self.number_of_caller_requests} caller requests', DEBUG)
-        self.log(f'- {self.number_of_200_requests + self.number_of_non_200_requests} actual requests', DEBUG)
-        self.log(f'-- {self.number_of_200_requests} successful (200) requests', DEBUG)
-        self.log(f'-- {self.number_of_non_200_requests} unsuccessful requests', DEBUG)
-        self.log(f'- {self.response_bytes} response bytes', DEBUG)
+        stats_log_level = INFO if self.stats else DEBUG
+        self.log(f'Statistics:', stats_log_level)
+        self.log(f'- {self.number_of_caller_requests} caller requests', stats_log_level)
+        self.log(f'- {self.number_of_200_requests + self.number_of_non_200_requests} actual requests', stats_log_level)
+        self.log(f'-- {self.number_of_200_requests} successful (200) requests', stats_log_level)
+        self.log(f'-- {self.number_of_non_200_requests} unsuccessful requests', stats_log_level)
+        self.log(f'- {self.response_bytes} response bytes', stats_log_level)
 
     def deserialize(self, apps_file: str=DEFAULT_APPS_FILE):
         """Basic JSON deserializer for the app uid, secret, and token.
@@ -218,8 +223,7 @@ class ApiHydra(ABC):
         )
         self.thread_counter += 1
         self.threads[-1].start()
-        # Assumes rate limit of 1 req/3sec + epsilon delay
-        time.sleep(0.1 + 3 / len(self.apps))
+        time.sleep((1 / self.requests_per_second) / len(self.apps))
 
 class FtApiHydra(ApiHydra):
     """ApiHydra subclass that makes interfacing with the 42 intra API not only a piece of cake,
@@ -232,7 +236,9 @@ class FtApiHydra(ApiHydra):
             api_base: str='https://api.intra.42.fr/v2',
             log_level: int=INFO,
             log_file: TextIO=sys.stdout,
+            stats: bool=False,
             max_retries: int=50,
+            requests_per_second: float=1/3,
             retry_delay_factor: float=1.1,
             apps_file: str=DEFAULT_APPS_FILE,
             intra_login: str,
@@ -242,7 +248,9 @@ class FtApiHydra(ApiHydra):
             api_base=api_base,
             log_level=log_level,
             log_file=log_file,
+            stats=stats,
             max_retries=max_retries,
+            requests_per_second=requests_per_second,
             retry_delay_factor=retry_delay_factor,
             apps_file=apps_file,
         )
