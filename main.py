@@ -128,9 +128,9 @@ def main() -> int:
 
     hydra = FtApiHydra(
         stats=True,
-        max_retries=100,
+        max_retries=10,
         requests_per_second=1.9,
-        log_level=logging.INFO,
+        log_level=logging.ERROR,
         intra_login=INTRA_LOGIN,
         intra_password=INTRA_PW,
     )
@@ -138,9 +138,45 @@ def main() -> int:
     # hydra.refresh_tokens()
     # get_all_users_by_campus(hydra)
     # get_all_users_by_campus_users(hydra)
-    get_all_users_42berlin(hydra)
-    # hydra.get('/users/tischmid')
+    # get_all_users_42berlin(hydra)
+    # hydra.get('/cursus/21/projects?filter[name]=Libft')
+    # hydra.get('/users/dlucio')
+    # hydra.get('/projects/42cursus-snow-crash')
+
     # print(json.dumps(hydra.get_responses()[0][1].json(), indent=4))
+
+    # with open('./all_core_projects_42berlin.csv') as f:
+    #     projects = {line.split(';')[0] : {'name':line.split(';')[1]} for line in f.read().splitlines()}
+    # hydra.clear_responses()
+    # for project in projects:
+    #     hydra.get(f'/projects/{project}')
+    # resps = hydra.get_responses()
+    # for resp in resps:
+    #     p_url, resp = resp
+    #     p_id = p_url.rsplit('/', 1)[1]
+    #     xp = resp.json()['difficulty']
+    #     projects[p_id]['xp'] = xp
+    # print(json.dumps(projects, indent=4, ensure_ascii=False))
+
+    # with open('./all_users_42berlin.json') as f:
+    #     users = json.load(f)
+    # with open('./projects_xp.json') as f:
+    #     projects_xp = json.load(f)
+    # for i in range(len(users)):
+    #     user = users[i]
+    #     login = user['login']
+    #     projects_users = user['projects_users']
+    #     if 'xp' not in users[i]:
+    #         users[i]['xp'] = 0
+    #     for projects_user in projects_users:
+    #         if 21 in projects_user['cursus_ids']:
+    #             project_id = str(projects_user['project']['id'])
+    #             if project_id in projects_xp:
+    #                 project_xp = int(projects_xp[project_id]['xp'])
+    #                 users[i]['xp'] += project_xp
+    #             else:
+    #                 pass
+    # print(json.dumps(users, indent=4))
 
     return 0
 
