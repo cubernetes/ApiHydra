@@ -701,7 +701,7 @@ class FtApiHydra(ApiHydra):
         app_ids = self.get_app_ids()
         self.log(f'Number of Apps: {len(app_ids)}', DEBUG)
         for i, app_id in enumerate(app_ids):
-            self.log(f'Adding app "{app_id}" to apps list ({i+1}/{len(app_ids)}).', INFO)
+            self.log(f'Adding updated app "{app_id}" to apps list ({i+1}/{len(app_ids)}).', INFO)
             self.apps[app_id]['id'] = app_id
             self.update_app(app_id)
         self.refresh_tokens()
