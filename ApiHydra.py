@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import re
 import sys
 import json
@@ -19,8 +20,11 @@ from bs4 import BeautifulSoup, Tag
 
 
 DEFAULT_APPS_FILE = './apps.json'
-DEFAULT_RESPONSES_FILE = './.responses_%s.json' # %s -> current timestamp
-TMPFS_FALLBACK_FILE = '/tmp/.responses_%s.json' # %s -> current timestamp
+DEFAULT_RESPONSES_FILE = './.responses_%s_%s.json' # %s -> current timestamp
+TMPFS_FALLBACK_FILE = '/tmp/.responses_%s_%s.json' # %s -> current timestamp
+# if this file exists, then program will try to finish gracefully and serialize
+# what needs to be serialized
+EMERGENCY_STOP_FILE = './SHUTDOWN_HYDRA'
 
 class ApiHydra(ABC):
     """Abstract Base Class for other ApiHydra subclasses. This class implements
@@ -41,6 +45,7 @@ class ApiHydra(ABC):
         retry_delay_factor: float=1.1,
         apps_file: str=DEFAULT_APPS_FILE,
         responses_file_path_template: str=DEFAULT_RESPONSES_FILE,
+        response_serialization_part: int=1,
     ) -> None:
         self.api_base = api_base
         self.log_level = log_level
@@ -65,6 +70,7 @@ class ApiHydra(ABC):
         self.serialize_responses_flag = True
         self.del_was_called = False
         self.refresh_tokens_flag = False
+        self.response_serialization_part = response_serialization_part
         atexit.register(self.__del__)
 
     def __del__(self) -> None:
@@ -74,7 +80,7 @@ class ApiHydra(ABC):
             return
         self.serialize(self.apps_file)
         if self.serialize_responses_flag:
-            self.serialize_responses(self.responses_file_path_template)
+            self.serialize_responses(responses_file_path_template=self.responses_file_path_template)
         stats_log_level = INFO if self.stats else DEBUG
         self.log(f'Statistics:', stats_log_level)
         self.log(f'- {self.number_of_ok_requests + self.number_of_non_ok_requests} requests', stats_log_level)
@@ -119,44 +125,44 @@ class ApiHydra(ABC):
             self.log(f'Dump of self.apps:', FATAL)
             self.log(f'{self.apps}', FATAL)
 
-    def serialize_responses(self, responses_file_path_template: str=DEFAULT_RESPONSES_FILE):
+    def serialize_responses(self, responses: list=[], responses_file_path_template: str=DEFAULT_RESPONSES_FILE, part: int=0):
         """Raw serializer for the response object, so hopefully nothing is lost.
         """
+        if not responses:
+            responses = self.responses
         serializable_responses = []
-        for resp in self.responses:
+        for resp in responses:
             serializable_responses.append((resp[0], resp[1].content.decode('utf-8', errors='backslashreplace')))
         try:
+            file_name = responses_file_path_template % (part, int(time.time()))
+        except TypeError:
+            file_name = f'./.responses_{time.time()}.json'
+        try:
+            with open(file_name, 'w', encoding='utf-8', errors='backslashreplace') as responses_file_writer:
+                json.dump(serializable_responses, responses_file_writer, indent=4, ensure_ascii=False)
+                self.log(f'Serialized responses to "{file_name}".', WARNING)
+        except TypeError as exc:
+            self.log(f'Could not serialize responses ({exc}).', FATAL)
+            self.log(f'Trying str repr instead', FATAL)
+            with open(file_name + '.py', 'w', encoding='utf-8', errors='backslashreplace') as responses_file_writer:
+                responses_file_writer.write(str(serializable_responses))
+                self.log(f'Serialized responses to "{file_name}".', INFO)
+        except IOError as exc:
+            self.log(f'Could not open "{file_name}" for writing ({exc}), trying file on tmpfs.', FATAL)
             try:
-                file_name = responses_file_path_template % (int(time.time()),)
+                file_name = TMPFS_FALLBACK_FILE % (part, int(time.time()))
             except TypeError:
                 file_name = f'./.responses_{time.time()}.json'
             try:
                 with open(file_name, 'w', encoding='utf-8', errors='backslashreplace') as responses_file_writer:
-                    json.dump(serializable_responses, responses_file_writer, indent=4, ensure_ascii=False)
-                    self.log(f'Serialized responses to "{file_name}".', WARNING)
+                    json.dump(self.apps, responses_file_writer, indent=4, ensure_ascii=False)
+                    self.log(f'Serialized responses to "{file_name}".', INFO)
             except TypeError as exc:
-                self.log(f'Could not serialize self.responses ({exc}).', FATAL)
+                self.log(f'Could not serialize responses ({exc}).', FATAL)
                 self.log(f'Trying str repr instead', FATAL)
                 with open(file_name + '.py', 'w', encoding='utf-8', errors='backslashreplace') as responses_file_writer:
                     responses_file_writer.write(str(serializable_responses))
                     self.log(f'Serialized responses to "{file_name}".', INFO)
-        except IOError as exc:
-            self.log(f'Could not open "{file_name}" for writing ({exc}), trying file on tmpfs.', FATAL)
-            try:
-                try:
-                    file_name = TMPFS_FALLBACK_FILE % (int(time.time()),)
-                except TypeError:
-                    file_name = f'./.responses_{time.time()}.json'
-                try:
-                    with open(file_name, 'w', encoding='utf-8', errors='backslashreplace') as responses_file_writer:
-                        json.dump(self.apps, responses_file_writer, indent=4, ensure_ascii=False)
-                        self.log(f'Serialized responses to "{file_name}".', INFO)
-                except TypeError as exc:
-                    self.log(f'Could not serialize self.responses ({exc}).', FATAL)
-                    self.log(f'Trying str repr instead', FATAL)
-                    with open(file_name + '.py', 'w', encoding='utf-8', errors='backslashreplace') as responses_file_writer:
-                        responses_file_writer.write(str(serializable_responses))
-                        self.log(f'Serialized responses to "{file_name}".', INFO)
             except IOError as exc:
                 self.log(f'Could not open "{TMPFS_FALLBACK_FILE}" for writing ({exc}), sorry, all response data is now lost.', FATAL)
         except Exception as exc:
@@ -299,7 +305,7 @@ class ApiHydra(ABC):
         while True:
             for thread in self.threads:
                 thread.join(1 / len(self.threads))
-            if all([not thread.isAlive() for thread in self.threads]):
+            if all([not thread.is_alive() for thread in self.threads]):
                 break
         self.log(f'All threads joined.', INFO)
         self.log(f'Clearing threads list.', DEBUG)
@@ -329,15 +335,32 @@ class ApiHydra(ABC):
         self.log(f'Returning responses (deepcopy).', DEBUG)
         return copy.deepcopy(self.responses)
 
+    def ensure_ready(self):
+        if os.path.isfile(EMERGENCY_STOP_FILE):
+            self.log(f'Main Thread: Found emergency stop file "{EMERGENCY_STOP_FILE}", finishing up.', FATAL)
+            self.join()
+            raise SystemExit(42)
+        if self.refresh_tokens_flag:
+            while self.refresh_tokens_flag:
+                time.sleep(0.5)
+        if threading.active_count() / 2 > len(self.apps):
+            self.log(f'Number of active threads ({threading.active_count()}) exceeded double the number of apps available ({len(self.apps)}). Waiting until number of active threads == number of apps.', WARNING)
+            while threading.active_count() >= len(self.apps):
+                time.sleep(0.5)
+            self.log(f'Active thread count == number of available apps == ({len(self.apps)}).', WARNING)
+        if len(self.responses) > 10_000:
+            self.join()
+            self.serialize_responses(responses_file_path_template='./response_part_%s_%s.json', part=self.response_serialization_part)
+            self.response_serialization_part += 1
+            self.clear_responses()
+
     def get(self, *args, **kwargs):
         """Construct a list of threads of get requests that will be started immediately,
            but wait specific time before next request can be made to avoid
            rate limiting. Caller can wait for all threads to finish by calling
            the self.join method.
         """
-        if self.refresh_tokens_flag:
-            while self.refresh_tokens_flag:
-                time.sleep(0.5)
+        self.ensure_ready()
         self.log(f'Creating new thread with function {self.__class__.__name__}._get and "{args=}", "{kwargs=}".', DEBUG)
         self.threads.append(
             threading.Thread(target=self._get, daemon=True, name=f'{self.__class__.__name__}._get-Thread-{self.thread_counter}', args=args, kwargs=kwargs)
@@ -353,9 +376,7 @@ class ApiHydra(ABC):
            rate limiting. Caller can wait for all threads to finish by calling
            the self.join method.
         """
-        if self.refresh_tokens_flag:
-            while self.refresh_tokens_flag:
-                time.sleep(0.5)
+        self.ensure_ready()
         self.log(f'Creating new thread with function {self.__class__.__name__}._post and "{args=}", "{kwargs=}".', DEBUG)
         self.threads.append(
             threading.Thread(target=self._post, daemon=True, name=f'{self.__class__.__name__}._post-Thread-{self.thread_counter}', args=args, kwargs=kwargs)
@@ -383,6 +404,7 @@ class FtApiHydra(ApiHydra):
             retry_delay_factor: float=1.1,
             apps_file: str=DEFAULT_APPS_FILE,
             responses_file_path_template: str=DEFAULT_RESPONSES_FILE,
+            response_serialization_part: int=1,
             intra_login: str,
             intra_password: str,
         ) -> None:
@@ -396,7 +418,8 @@ class FtApiHydra(ApiHydra):
             requests_per_second=requests_per_second,
             retry_delay_factor=retry_delay_factor,
             apps_file=apps_file,
-            responses_file_path_template=responses_file_path_template
+            responses_file_path_template=responses_file_path_template,
+            response_serialization_part=response_serialization_part,
         )
         self.intra_login = intra_login
         self.intra_password = intra_password
@@ -435,6 +458,7 @@ class FtApiHydra(ApiHydra):
 
     def make_request_kwargs_from_app(self, app: dict, **kwargs) -> dict[str, Any]:
         """Intra API implements bearer authentication.
+           This method should not be run in the main thread.
         """
         app_id = app.get('id', '')
         if app_id and self.refresh_tokens_flag:
@@ -446,6 +470,9 @@ class FtApiHydra(ApiHydra):
         if not app_id:
             self.log(f'Intra app has no id.', ERROR)
         else:
+            if os.path.isfile(EMERGENCY_STOP_FILE):
+                self.log(f'Found emergency stop file "{EMERGENCY_STOP_FILE}", exiting thread "{threading.current_thread().name}".', WARNING)
+                raise SystemExit(42)
             if expires_in <= time.time():
                 self.log(f'Token for app "{app_id}" expired ({time.time() - expires_in}s ago).', WARNING)
                 self.log(f'Setting self.refresh_tokens_flag to True.', DEBUG)

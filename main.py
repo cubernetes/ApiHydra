@@ -129,6 +129,8 @@ def get_literally_all_users(hydra: FtApiHydra):
         login_ids.append(campus_user['user_id'])
     hydra.clear_responses()
     for i, login_id in enumerate(login_ids):
+        if i < 130518:
+            continue
         print(end=f'\r{i=:>3}/{len(login_ids)} ({login_id=})' + ' '*10)
         hydra.get(f'/users/{login_id}')
     resps = hydra.get_responses()
@@ -153,7 +155,8 @@ def main() -> int:
         log_level=logging.INFO,
         intra_login=INTRA_LOGIN,
         intra_password=INTRA_PW,
-        responses_file_path_template='./output_%s.json',
+        responses_file_path_template='./output_%s_%s.json',
+        response_serialization_part=14,
     )
 
     hydra.update()
