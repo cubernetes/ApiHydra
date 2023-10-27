@@ -61,10 +61,14 @@ class ApiHydra(ABC):
         self.number_of_ok_requests = 0
         self.number_of_non_ok_requests = 0
         self.response_bytes = 0
+        self.serialize_responses_flag = True
 
     def __del__(self):
+        """Destructor for serialization and statistics logging.
+        """
         self.serialize(self.apps_file)
-        self.serialize_responses(self.responses_file_path_template)
+        if self.serialize_responses_flag:
+            self.serialize_responses(self.responses_file_path_template)
         stats_log_level = INFO if self.stats else DEBUG
         self.log(f'Statistics:', stats_log_level)
         self.log(f'- {self.number_of_ok_requests + self.number_of_non_ok_requests} requests', stats_log_level)
@@ -72,6 +76,11 @@ class ApiHydra(ABC):
         self.log(f'---- {self.number_of_ok_requests} successful (OK) requests', stats_log_level)
         self.log(f'---- {self.number_of_non_ok_requests} unsuccessful requests', stats_log_level)
         self.log(f'- {self.response_bytes} ({self.response_bytes / 1e6:.2f} MB) bytes received (only OK requests)', stats_log_level)
+
+    def finish(self) -> None:
+        """Set flags s.t. no auto-serialization will be done.
+        """
+        self.serialize_responses_flag = False
 
     def deserialize(self, apps_file: str=DEFAULT_APPS_FILE):
         """Basic JSON deserializer for the app uid, secret, and token.
@@ -106,7 +115,6 @@ class ApiHydra(ABC):
     def serialize_responses(self, responses_file_path_template: str=DEFAULT_RESPONSES_FILE):
         """Raw serializer for the response object, so hopefully nothing is lost.
         """
-        self.log(f'Serializing repsonses to "{responses_file_path_template}"...', INFO)
         serializable_responses = []
         for resp in self.responses:
             serializable_responses.append((resp[0], resp[1].content.decode('utf-8', errors='backslashreplace')))
@@ -118,7 +126,7 @@ class ApiHydra(ABC):
             try:
                 with open(file_name, 'w', encoding='utf-8', errors='backslashreplace') as responses_file_writer:
                     json.dump(serializable_responses, responses_file_writer, indent=4, ensure_ascii=False)
-                    self.log(f'Serialized responses to "{file_name}".', INFO)
+                    self.log(f'Serialized responses to "{file_name}".', WARNING)
             except TypeError as exc:
                 self.log(f'Could not serialize self.responses ({exc}).', FATAL)
                 self.log(f'Trying str repr instead', FATAL)
