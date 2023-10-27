@@ -332,7 +332,7 @@ class ApiHydra(ABC):
         self.thread_counter += 1
         self.threads[-1].start()
         delay = (1 / self.requests_per_second) / len(self.apps)
-        time.sleep(min(delay, self.min_request_delay))
+        time.sleep(max(delay, self.min_request_delay))
 
     def post(self, *args, **kwargs):
         """Construct a list of threads of post requests that will be started immediately,
@@ -347,7 +347,7 @@ class ApiHydra(ABC):
         self.thread_counter += 1
         self.threads[-1].start()
         delay = (1 / self.requests_per_second) / len(self.apps)
-        time.sleep(min(delay, self.min_request_delay))
+        time.sleep(max(delay, self.min_request_delay))
 
 class FtApiHydra(ApiHydra):
     """ApiHydra subclass that makes interfacing with the 42 intra API not only a piece of cake,
@@ -661,7 +661,7 @@ class FtApiHydra(ApiHydra):
         return len(self.apps)
 
     def set_number_of_apps(self, number_of_apps: int, *, update: bool=True) -> None:
-        if update and self.is_updated:
+        if update and not self.is_updated:
             self.update()
         diff = number_of_apps - len(self.apps)
         if number_of_apps < 0:
@@ -684,13 +684,24 @@ class FtApiHydra(ApiHydra):
                 self.create_app()
             self.log(f'Created {diff} apps, new app count is {len(self.apps)}.', INFO)
 
-    def get_requests_left_this_hour(self, *, update: bool=True) -> int:
-        if update and self.is_updated:
+    def get_requests_left_this_hour(self, *, update: bool=True) -> tuple[int, int]:
+        if update and not self.is_updated:
             self.update()
         requests_left = 0
+        max_requests = 0
         for app in self.apps.values():
             requests_left += app['max_requests_per_hour'] - app['requests_last_hour']
-        return requests_left
+            max_requests += app['max_requests_per_hour']
+        return requests_left, max_requests
+
+    def print_api_usage(self, *, update: bool=True) -> None:
+        """Print the number of requests left, the maximum number of request that
+           can be made per hour and how many were made.
+        """
+        if update and not self.is_updated:
+            self.update()
+        left, max = self.get_requests_left_this_hour(update=update)
+        print(f'{left} out of {max} API requests left ({max-left} were made)', flush=True)
 
     def update(self) -> None:
         """Fully update the credentials and tokens of all apps that are available
