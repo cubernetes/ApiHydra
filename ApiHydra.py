@@ -5,7 +5,7 @@ import sys
 import json
 import time
 import copy
-import requests
+import atexit
 import threading
 from datetime import datetime
 from typing import Any, TextIO
@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 import logging
 from logging import DEBUG, INFO, WARNING, ERROR, FATAL
 
+import requests
 from bs4 import BeautifulSoup, Tag
 
 
@@ -62,10 +63,15 @@ class ApiHydra(ABC):
         self.number_of_non_ok_requests = 0
         self.response_bytes = 0
         self.serialize_responses_flag = True
+        self.del_was_called = False
+        self.refresh_tokens_flag = False
+        atexit.register(self.__del__)
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Destructor for serialization and statistics logging.
         """
+        if self.del_was_called:
+            return
         self.serialize(self.apps_file)
         if self.serialize_responses_flag:
             self.serialize_responses(self.responses_file_path_template)
@@ -76,6 +82,7 @@ class ApiHydra(ABC):
         self.log(f'---- {self.number_of_ok_requests} successful (OK) requests', stats_log_level)
         self.log(f'---- {self.number_of_non_ok_requests} unsuccessful requests', stats_log_level)
         self.log(f'- {self.response_bytes} ({self.response_bytes / 1e6:.2f} MB) bytes received (only OK requests)', stats_log_level)
+        self.del_was_called = True
 
     def finish(self) -> None:
         """Set flags s.t. no auto-serialization will be done.
@@ -178,7 +185,7 @@ class ApiHydra(ABC):
         else:
             clr_rst = ''
             ansi = ''
-        print(f'{ansi}[{self.__class__.__name__}, {logging.getLevelName(log_level):>10}] {msg}{clr_rst}', file=self.log_file, flush=True)
+        print(f'{ansi}[{str(datetime.now())}, {self.__class__.__name__}, {logging.getLevelName(log_level):>10}] {msg}{clr_rst}', file=self.log_file, flush=True)
 
     def get_next_app(self):
         """Rotate through the list of available apps uniformily across
@@ -289,8 +296,11 @@ class ApiHydra(ABC):
         """Wait for all threads to finish.
         """
         self.log(f'Joining threads...', INFO)
-        for thread in self.threads:
-            thread.join()
+        while True:
+            for thread in self.threads:
+                thread.join(1 / len(self.threads))
+            if all([not thread.isAlive() for thread in self.threads]):
+                break
         self.log(f'All threads joined.', INFO)
         self.log(f'Clearing threads list.', DEBUG)
         self.threads.clear()
@@ -325,9 +335,12 @@ class ApiHydra(ABC):
            rate limiting. Caller can wait for all threads to finish by calling
            the self.join method.
         """
+        if self.refresh_tokens_flag:
+            while self.refresh_tokens_flag:
+                time.sleep(0.5)
         self.log(f'Creating new thread with function {self.__class__.__name__}._get and "{args=}", "{kwargs=}".', DEBUG)
         self.threads.append(
-            threading.Thread(target=self._get, name=f'{self.__class__.__name__}._get-Thread-{self.thread_counter}', args=args, kwargs=kwargs)
+            threading.Thread(target=self._get, daemon=True, name=f'{self.__class__.__name__}._get-Thread-{self.thread_counter}', args=args, kwargs=kwargs)
         )
         self.thread_counter += 1
         self.threads[-1].start()
@@ -340,9 +353,12 @@ class ApiHydra(ABC):
            rate limiting. Caller can wait for all threads to finish by calling
            the self.join method.
         """
+        if self.refresh_tokens_flag:
+            while self.refresh_tokens_flag:
+                time.sleep(0.5)
         self.log(f'Creating new thread with function {self.__class__.__name__}._post and "{args=}", "{kwargs=}".', DEBUG)
         self.threads.append(
-            threading.Thread(target=self._post, name=f'{self.__class__.__name__}._post-Thread-{self.thread_counter}', args=args, kwargs=kwargs)
+            threading.Thread(target=self._post, daemon=True, name=f'{self.__class__.__name__}._post-Thread-{self.thread_counter}', args=args, kwargs=kwargs)
         )
         self.thread_counter += 1
         self.threads[-1].start()
@@ -421,10 +437,21 @@ class FtApiHydra(ApiHydra):
         """Intra API implements bearer authentication.
         """
         app_id = app.get('id', '')
-        token = app.get('token', '')
+        if app_id and self.refresh_tokens_flag:
+            while self.refresh_tokens_flag:
+                time.sleep(0.5)
+            app = self.apps[app_id]
+        token = app.get('access_token', '')
+        expires_in = app.get('token_expires_in', -1)
         if not app_id:
             self.log(f'Intra app has no id.', ERROR)
         else:
+            if expires_in <= time.time():
+                self.log(f'Token for app "{app_id}" expired ({time.time() - expires_in}s ago).', WARNING)
+                self.log(f'Setting self.refresh_tokens_flag to True.', DEBUG)
+                self.refresh_tokens()
+                self.log(f'Setting self.refresh_tokens_flag to False.', DEBUG)
+                return self.make_request_kwargs_from_app(self.apps[app_id], **kwargs)
             if not token:
                 self.log(f'Intra app "{app_id}" has no token.', ERROR)
                 token = f'MISSING_TOKEN_{int(time.time())}'
@@ -464,28 +491,20 @@ class FtApiHydra(ApiHydra):
         else:
             self.log(f'Intra session creation successful.', INFO)
 
-    def get_token(self, app_id: str, uid: str, secret: str) -> str:
+    def get_token(self, app_id: str, uid: str, secret: str) -> dict:
         """Requests an application access token using uid and secret.
         """
-        try:
-            resp = self.requests_post('https://api.intra.42.fr/oauth/token', data={
-                'grant_type': 'client_credentials',
-                'client_id': uid,
-                'client_secret': secret,
-            })
-        except KeyboardInterrupt:
-            print(end='\n', file=sys.stdout, flush=True)
-            self.log(f'Received KeyboardInterrupt.', FATAL)
-            raise SystemExit(130)
+        resp = self.requests_post('https://api.intra.42.fr/oauth/token', data={
+            'grant_type': 'client_credentials',
+            'client_id': uid,
+            'client_secret': secret,
+        })
         if resp.status_code != 200:
             self.log(f'Could not get access token ({resp.status_code}) for app "{app_id}".', ERROR)
-            return ''
+            return {'access_token': '', 'token_expires_in': -1}
         else:
             resp = resp.json()
-            expires_in = resp['expires_in']
-            token = resp['access_token']
-            self.log(f'- {token=} {expires_in=}s\n', DEBUG)
-            return token
+            return resp
 
     def update_app(self, app_id: str) -> None:
         """Scrape uid and secret from a given API application from the intra.
@@ -594,12 +613,17 @@ class FtApiHydra(ApiHydra):
     def refresh_tokens(self) -> None:
         """Only refresh the access tokens (fast)
         """
+        self.refresh_tokens_flag = True
         for i, (app_id, app_creds) in enumerate(self.apps.items()):
             self.log(f'Refreshing token for app "{app_id}" ({i+1}/{len(self.apps)}).', INFO)
             uid = app_creds['uid']
             secret = app_creds['secret']
-            token = self.get_token(app_id, uid, secret)
-            self.apps[app_id]['token'] = token
+            token_resp = self.get_token(app_id, uid, secret)
+            access_token = token_resp['access_token']
+            expires_in = int(time.time()) + int(token_resp['expires_in'])
+            self.apps[app_id]['access_token'] = access_token
+            self.apps[app_id]['token_expires_in'] = expires_in
+        self.refresh_tokens_flag = False
 
     def delete_app(self, app_id: str) -> None:
         """Delete API intra app by id.
@@ -627,7 +651,7 @@ class FtApiHydra(ApiHydra):
     def create_app(self, *, update: bool=True):
         """Create new API intra app with prefix "ApiHydra_" followed by index.
         """
-        if update and not self.is_updated:
+        if update:
             self.update()
         apps_page = self.requests_get(f'https://profile.intra.42.fr/oauth/applications')
         if apps_page.status_code != 200:
@@ -656,12 +680,12 @@ class FtApiHydra(ApiHydra):
             self.log(f'Could not create app, could not find authenticity token.', ERROR)
 
     def get_number_of_apps(self, *, update: bool=True) -> int:
-        if update and not self.is_updated:
+        if update:
             self.update()
         return len(self.apps)
 
     def set_number_of_apps(self, number_of_apps: int, *, update: bool=True) -> None:
-        if update and not self.is_updated:
+        if update:
             self.update()
         diff = number_of_apps - len(self.apps)
         if number_of_apps < 0:
@@ -685,7 +709,7 @@ class FtApiHydra(ApiHydra):
             self.log(f'Created {diff} apps, new app count is {len(self.apps)}.', INFO)
 
     def get_requests_left_this_hour(self, *, update: bool=True) -> tuple[int, int]:
-        if update and not self.is_updated:
+        if update:
             self.update()
         requests_left = 0
         max_requests = 0
@@ -698,7 +722,7 @@ class FtApiHydra(ApiHydra):
         """Print the number of requests left, the maximum number of request that
            can be made per hour and how many were made.
         """
-        if update and not self.is_updated:
+        if update:
             self.update()
         left, max = self.get_requests_left_this_hour(update=update)
         print(f'{left} out of {max} API requests left ({max-left} were made)', flush=True)

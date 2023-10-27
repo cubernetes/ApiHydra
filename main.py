@@ -22,19 +22,20 @@ def get_all_users_by_campus_users(hydra: FtApiHydra):
     data = []
 
     while True:
+        if batch > 3:
+            return
         for page in range((batch - 1) * batch_size + 1, batch * batch_size + 1):
             print(end=f'\r{page=:>3}/{batch * batch_size} ({batch=})' + ' '*10)
             hydra.get(f'/campus_users?per_page={per_page}&page={page}')
         print()
-        resps = hydra.get_responses_copy()
-        hydra.clear_responses()
-        for d in [resp[1].json() for resp in resps if resp[1].json()]:
+        resps = hydra.get_responses()
+        for d in [resp[1].json() for resp in resps[-batch:] if resp[1].json()]:
             data += d
-        for resp in resps:
+        for resp in resps[-batch:]:
             if len(resp[1].json()) != per_page:
                 print('Done')
                 with open('./output.json', 'w', encoding='utf-8') as output_file_writer:
-                    json.dump(data, output_file_writer, indent=4, ensure_ascii=False, sort_keys=True)
+                    json.dump(data, output_file_writer, indent=4, ensure_ascii=False)
                 return
         batch += 1
 
@@ -120,6 +121,24 @@ def get_all_users_by_campus(hydra: FtApiHydra):
     with open('./output.json', 'w', encoding='utf-8') as output_file_writer:
         json.dump(data, output_file_writer, indent=4, ensure_ascii=False, sort_keys=True)
 
+def get_literally_all_users(hydra: FtApiHydra):
+    login_ids = []
+    with open('./all_campus_users.json') as all_campus_users_reader:
+        campus_users = json.load(all_campus_users_reader)
+    for campus_user in campus_users:
+        login_ids.append(campus_user['user_id'])
+    hydra.clear_responses()
+    for i, login_id in enumerate(login_ids):
+        print(end=f'\r{i=:>3}/{len(login_ids)} ({login_id=})' + ' '*10)
+        hydra.get(f'/users/{login_id}')
+    resps = hydra.get_responses()
+    data = []
+    for resp in resps:
+        data.append(resp[1].json())
+
+    with open('./output.json', 'w', encoding='utf-8') as output_file_writer:
+        json.dump(data, output_file_writer, indent=4, ensure_ascii=False, sort_keys=True)
+
 def main() -> int:
     load_dotenv()
     INTRA_LOGIN = os.environ.get('INTRA_LOGIN', '')
@@ -128,20 +147,27 @@ def main() -> int:
 
     hydra = FtApiHydra(
         stats=True,
-        max_retries=10,
+        max_retries=100,
         requests_per_second=1.9,
-        log_level=logging.ERROR,
+        min_request_delay=.03,
+        log_level=logging.INFO,
         intra_login=INTRA_LOGIN,
         intra_password=INTRA_PW,
+        responses_file_path_template='./output_%s.json',
     )
+
     # hydra.update()
     # hydra.refresh_tokens()
+
     # get_all_users_by_campus(hydra)
     # get_all_users_by_campus_users(hydra)
     # get_all_users_42berlin(hydra)
     # hydra.get('/cursus/21/projects?filter[name]=Libft')
     # hydra.get('/users/dlucio')
     # hydra.get('/projects/42cursus-snow-crash')
+    # hydra.print_api_usage(update=False)
+    get_literally_all_users(hydra)
+    hydra.print_api_usage(update=True)
 
     # print(json.dumps(hydra.get_responses()[0][1].json(), indent=4))
 
@@ -178,6 +204,7 @@ def main() -> int:
     #                 pass
     # print(json.dumps(users, indent=4))
 
+    hydra.finish()
     return 0
 
 if __name__ == '__main__':
