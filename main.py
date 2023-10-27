@@ -149,14 +149,14 @@ def main() -> int:
         stats=True,
         max_retries=100,
         requests_per_second=1.9,
-        min_request_delay=.03,
+        min_request_delay=.02,
         log_level=logging.INFO,
         intra_login=INTRA_LOGIN,
         intra_password=INTRA_PW,
         responses_file_path_template='./output_%s.json',
     )
 
-    # hydra.update()
+    hydra.update()
     # hydra.refresh_tokens()
 
     # get_all_users_by_campus(hydra)
@@ -165,7 +165,7 @@ def main() -> int:
     # hydra.get('/cursus/21/projects?filter[name]=Libft')
     # hydra.get('/users/dlucio')
     # hydra.get('/projects/42cursus-snow-crash')
-    # hydra.print_api_usage(update=False)
+    hydra.print_api_usage(update=False)
     get_literally_all_users(hydra)
     hydra.print_api_usage(update=True)
 
