@@ -735,6 +735,14 @@ class FtApiHydra(ApiHydra):
                 self.create_app()
             self.log(f'Created {diff} apps, new app count is {len(self.apps)}.', INFO)
 
+    def get_total_number_of_requests(self, *, update: bool=True) -> int:
+        if update:
+            self.update()
+        total_requests = 0
+        for app in self.apps.values():
+            total_requests += app['total_requests']
+        return total_requests
+
     def get_requests_left_this_hour(self, *, update: bool=True) -> tuple[int, int]:
         if update:
             self.update()

@@ -159,7 +159,7 @@ def main() -> int:
         response_serialization_part=14,
     )
 
-    hydra.update()
+    # hydra.update()
     # hydra.refresh_tokens()
 
     # get_all_users_by_campus(hydra)
@@ -168,9 +168,9 @@ def main() -> int:
     # hydra.get('/cursus/21/projects?filter[name]=Libft')
     # hydra.get('/users/dlucio')
     # hydra.get('/projects/42cursus-snow-crash')
-    hydra.print_api_usage(update=False)
-    get_literally_all_users(hydra)
-    hydra.print_api_usage(update=True)
+    # hydra.print_api_usage(update=False)
+    # get_literally_all_users(hydra)
+    # hydra.print_api_usage(update=True)
 
     # print(json.dumps(hydra.get_responses()[0][1].json(), indent=4))
 
