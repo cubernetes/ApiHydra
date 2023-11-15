@@ -26,7 +26,7 @@ but on `/tmp`.
 ## Prerequisites
 ```sh
 python3 -m venv ./env # or virtualenv ./env
-. ./env/bin/activate
+. ./env/bin/activate # mind the leading dot before the path
 pip install -r requirements.txt
 ```
 
