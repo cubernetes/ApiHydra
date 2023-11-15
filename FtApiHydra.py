@@ -275,7 +275,7 @@ class FtApiHydra(ApiHydra):
         """Only refresh the access tokens (fast)
         """
         self.refresh_tokens_flag = True
-        for i, (app_id, app_creds) in enumerate(copy.deepcopy(self.apps.items())):
+        for i, (app_id, app_creds) in enumerate(copy.deepcopy(self.apps).items()):
             self.log(f'Refreshing token for app "{app_id}" ({i+1}/{len(self.apps)}).', INFO)
             uid = app_creds.get('uid', '')
             secret = app_creds.get('secret', '')
@@ -297,6 +297,11 @@ class FtApiHydra(ApiHydra):
         app_page = self.requests_get(f'https://profile.intra.42.fr/oauth/applications/{app_id}')
         if app_page.status_code != 200:
             self.log(f'Could not get page ({app_page.status_code}) to delete app "{app_id}".', ERROR)
+            if app_page.status_code != 429:
+                self.log(f'Waiting 2 seconds to overcome rate limiting.', WARNING)
+                time.sleep(2)
+                self.log(f'Trying again to delete app "{app_id}".', WARNING)
+                self.delete_app(app_id)
             return
         soup = BeautifulSoup(app_page.text, 'html.parser')
         csrf_token_meta = soup.find('meta', {'name': 'csrf-token'})
@@ -353,6 +358,7 @@ class FtApiHydra(ApiHydra):
         if update:
             self.update()
         diff = number_of_apps - len(self.apps)
+        self.log(f'{diff=}', ERROR)
         if number_of_apps < 0:
             self.log(f'Cannot have negative number ({number_of_apps}) of apps.', ERROR)
             return

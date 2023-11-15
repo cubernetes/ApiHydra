@@ -7,6 +7,9 @@ Import the module and create an instance of the hydra with the parameters you ne
 For an already pretty fast client you can use these parameters:
 
 ```python
+import loggin
+from FtApiHydra import FtApiHydra
+
 hydra = FtApiHydra(
     stats=True,
     max_retries=100,
@@ -18,3 +21,5 @@ hydra = FtApiHydra(
     responses_file_path_template='./output_%s_%s.json',
 )
 ```
+
+The default parameter `api_base: str = 'https://api.intra.42.fr/v2'`{:.python}
