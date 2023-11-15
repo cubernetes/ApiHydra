@@ -1,11 +1,32 @@
 # ApiHydra
-This is a small and WiP project to load-balance any API in a multi-threaded
-and client-side fashion. The only currently implemented API is the 42 Intra API.
+This is a small and WiP project to load-balance any API in a multi-threaded and
+client-side fashion (similar to lunar.dev). The only currently implemented
+ApiHydra is for the 42 Intra API. If tuned correctly, it allows for hundreds,
+even thousand(s) of requests per second, although if you want to be
+nice, don't do that. There's are many fallback and failsafe mechanisms
+built in, such that long running programs don't suddenly lose all the
+data because of one exception. It also handles big memory issues when
+you're making a very large number of requests (100K+). It will dump
+every batch of 10K requests to disk and start anew with empty memory.
+Load-balancing is done on a rotating-token basis, so start the Hydra
+again and again will not load balance the usage. For non-api related
+requests, there's a 2 second infinite retry delay. For api related
+requests, there's an optional constructor argument `max_retries` that
+is 50 by default. For 404's, this limit is 5 instead. The delay
+increases exponentially. If you have a large number of apps (100+),
+the theoretical delay might between requests might be very small, so
+to not DOS the server, please use the `min_request_delay` parameter
+sensibly. The `requests_per_second` parameter should be set to the API
+limit per second per app, or a little bit less for safety.
+If the program exits without calling the .finish() method, it will try
+to serialize the responses to disk, first as json, if that fails, then by
+calling the str() method, and if that fails too, it'll try both things again
+but on `/tmp`.
 
 ## Prerequisites
 ```sh
-python3 -m venv env # or virtualenv env
-. env/bin/activate
+python3 -m venv ./env # or virtualenv ./env
+. ./env/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -13,9 +34,9 @@ pip install -r requirements.txt
 First, make sure that you have 2FA disabled. After that, you can
 import the module and create an instance of the hydra with the parameters you need.
 For an already pretty fast client you can use these parameters:
-
 ```python
 #! /usr/bin/env python3
+
 import logging
 from FtApiHydra import FtApiHydra
 
