@@ -3,7 +3,7 @@ This is a small and WiP project to load-balance any API in a multi-threaded and
 client-side fashion (similar to lunar.dev). The only currently implemented
 ApiHydra is for the 42 Intra API. If tuned correctly, it allows for hundreds,
 even thousand(s) of requests per second, although if you want to be
-nice, don't do that. There's are many fallback and failsafe mechanisms
+nice, don't do that. There are many fallback and failsafe mechanisms
 built in, such that long running programs don't suddenly lose all the
 data because of one exception. It also handles big memory issues when
 you're making a very large number of requests (100K+). It will dump
