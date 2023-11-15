@@ -18,8 +18,8 @@ hydra = FtApiHydra(
     requests_per_second=1.9,
     min_request_delay=.02,
     log_level=logging.INFO,
-    intra_login=INTRA_LOGIN,
-    intra_password=INTRA_PW,
+    intra_login='your_login',
+    intra_password='your_plain_password',
     responses_file_path_template='./output_%s_%s.json',
 )
 ```
