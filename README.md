@@ -26,7 +26,8 @@ hydra = FtApiHydra(
 
 The default parameter `api_base: str = 'https://api.intra.42.fr/v2'`
 ensures that you only have to type the important part of the endpoint.
-So to make 1000 requests, let's say for the users of 42 Berlin, this is all you need:
+So to make 1000 requests, let's say for the users of 42 Berlin, this is all you need
+(main.py contains fuller example):
 ```python
 import json
 
