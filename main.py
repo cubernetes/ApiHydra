@@ -19,7 +19,7 @@ INTRA_PW = b64decode(INTRA_PW_B64.encode()).decode()
 
 hydra = FtApiHydra(
     stats=True,
-    max_retries=100,
+    max_retries=50,
     requests_per_second=1.9,
     min_request_delay=.02,
     log_level=logging.INFO,
