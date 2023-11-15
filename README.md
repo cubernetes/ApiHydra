@@ -8,7 +8,8 @@ import the module and create an instance of the hydra with the parameters you ne
 For an already pretty fast client you can use these parameters:
 
 ```python
-import loggin
+#! /usr/bin/env python3
+import logging
 from FtApiHydra import FtApiHydra
 
 hydra = FtApiHydra(
@@ -36,7 +37,7 @@ for login in logins:
 data = hydra.get_responses_as_json()
 
 with open('output.json', 'w', encoding='utf-8') as f:
-    json.write(data, f, ensure_ascii=False)
+    json.dump(data, f, ensure_ascii=False)
 
 hydra.finish()
 ```
