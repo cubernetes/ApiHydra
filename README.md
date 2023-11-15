@@ -2,7 +2,14 @@
 This is a small and WiP project to load-balance any API in a multi-threaded
 and client-side fashion. The only currently implemented API is the 42 Intra API.
 
-## Getting started (FtApiHydra)
+## Prerequisites
+```sh
+python3 -m venv env # or virtualenv env
+. env/bin/activate
+pip install -r requirements.txt
+```
+
+## Quickstart (FtApiHydra, demo in main.py)
 First, make sure that you have 2FA disabled. After that, you can
 import the module and create an instance of the hydra with the parameters you need.
 For an already pretty fast client you can use these parameters:
@@ -52,4 +59,5 @@ or when the program unexpectedly exits.
 If there are unexpected behaviours, first make sure to set the log_level to
 `logging.DEBUG` (other possible values are `.WARNING`, `.ERROR`, and `.FATAL`).
 If that doesn't work, try to find the error. Fix it. Make a pull requests.
-Otherwise make an issue.
+Otherwise make an issue. Frankly, the code is bad, but there is some
+documentation about what the methods do, feel free to read it.
