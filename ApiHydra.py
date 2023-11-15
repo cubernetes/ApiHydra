@@ -248,6 +248,9 @@ class ApiHydra(ABC):
                 self.number_of_non_ok_requests += 1
                 failed_req_log_level = DEBUG if resp.status_code == 429 else WARNING
                 self.log(f'{threading.current_thread().name}: Could not get "{url}" ({resp.status_code}) (retries: {retries}).', failed_req_log_level)
+                if retries > 5 and resp.status_code == 404:
+                    self.log(f'{threading.current_thread().name}: After {retries} gets on "{url}": 404 not found. Returning early.', failed_req_log_level)
+                    return
                 time.sleep(delay)
                 delay *= self.retry_delay_factor
             else:
@@ -292,6 +295,9 @@ class ApiHydra(ABC):
                 self.number_of_non_ok_requests += 1
                 failed_req_log_level = DEBUG if resp.status_code == 429 else WARNING
                 self.log(f'{threading.current_thread().name}: Could not post "{url}" ({resp.status_code}) (retries: {retries}).', failed_req_log_level)
+                if retries > 5 and resp.status_code == 404:
+                    self.log(f'{threading.current_thread().name}: After {retries} posts on "{url}": 404 not found. Returning early.', failed_req_log_level)
+                    return
                 time.sleep(delay)
                 delay *= self.retry_delay_factor
             else:

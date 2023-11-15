@@ -374,7 +374,7 @@ class FtApiHydra(ApiHydra):
             return
         elif diff < 0:
             self.log(f'Deleting {-diff} apps...', DEBUG)
-            for app_id in list(self.apps)[:diff]:
+            for app_id in list(self.apps)[:-diff]:
                 self.delete_app(app_id)
             self.log(f'Deleted {-diff} apps, new app count is {len(self.apps)}.', INFO)
         else:
