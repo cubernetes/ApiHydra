@@ -97,7 +97,7 @@ class FtApiHydra(ApiHydra):
         token = app.get('access_token', '')
         expires_in = app.get('token_expires_in', None)
         if not expires_in:
-            self.log(f'Expires in value for app "{app_id}" did not exist.', ERROR)
+            self.log(f'"expires_in" value for app "{app_id}" did not exist.', ERROR)
             expires_in = time.time() + 10000
         if not app_id:
             self.log(f'Intra app has no id.', ERROR)
@@ -172,11 +172,16 @@ class FtApiHydra(ApiHydra):
         """
         self.ensure_session()
         self.log(f'Getting app credentials (uid, secret) for app "{app_id}".', DEBUG)
-        resp = self.requests_get(f'https://profile.intra.42.fr/oauth/applications/{app_id}')
-        if resp.status_code != 200:
-            self.log(f'Could not get page ({resp.status_code}) to update app "{app_id}".', ERROR)
+        app_page = self.requests_get(f'https://profile.intra.42.fr/oauth/applications/{app_id}')
+        if app_page.status_code != 200:
+            self.log(f'Could not get page ({app_page.status_code}) to update app "{app_id}".', ERROR)
+            if app_page.status_code == 429:
+                self.log(f'Waiting 2 seconds to overcome rate limiting.', WARNING)
+                time.sleep(2)
+                self.log(f'Trying again to update app "{app_id}".', WARNING)
+                self.delete_app(app_id)
             return
-        html = resp.text
+        html = app_page.text
         soup = BeautifulSoup(html, 'html.parser')
 
         secret_div = soup.find('div', {'data-copy': f'[data-app-secret-{app_id}]'}, class_='copy')
@@ -297,7 +302,7 @@ class FtApiHydra(ApiHydra):
         app_page = self.requests_get(f'https://profile.intra.42.fr/oauth/applications/{app_id}')
         if app_page.status_code != 200:
             self.log(f'Could not get page ({app_page.status_code}) to delete app "{app_id}".', ERROR)
-            if app_page.status_code != 429:
+            if app_page.status_code == 429:
                 self.log(f'Waiting 2 seconds to overcome rate limiting.', WARNING)
                 time.sleep(2)
                 self.log(f'Trying again to delete app "{app_id}".', WARNING)
@@ -358,7 +363,6 @@ class FtApiHydra(ApiHydra):
         if update:
             self.update()
         diff = number_of_apps - len(self.apps)
-        self.log(f'{diff=}', ERROR)
         if number_of_apps < 0:
             self.log(f'Cannot have negative number ({number_of_apps}) of apps.', ERROR)
             return
@@ -376,8 +380,9 @@ class FtApiHydra(ApiHydra):
         else:
             self.log(f'Creating {diff} apps...', DEBUG)
             for _ in range(diff):
-                self.create_app()
+                self.create_app(update=False)
             self.log(f'Created {diff} apps, new app count is {len(self.apps)}.', INFO)
+        self.update()
 
     def get_total_number_of_requests(self, *, update: bool=True) -> int:
         if update:
@@ -428,7 +433,10 @@ class FtApiHydra(ApiHydra):
         self.ensure_session()
         app_ids = self.get_app_ids()
         self.log(f'Number of Apps: {len(app_ids)}', DEBUG)
+        self.apps.clear()
         for i, app_id in enumerate(app_ids):
+            if not app_id:
+                continue
             self.log(f'Adding updated app "{app_id}" to apps list ({i+1}/{len(app_ids)}).', INFO)
             self.apps[app_id]['id'] = app_id
             self.update_app(app_id)

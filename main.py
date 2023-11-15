@@ -33,7 +33,7 @@ hydra.set_number_of_apps(50)
 campus = 'berlin'
 max_pages = 50
 for page in range(1,21): # we have less than 2000 == 20*100 users in berlin
-    print(f'Getting users from campus "{campus}", page: {page}/{max_pages}')
+    print(f'\rGetting users from campus "{campus}", page: {page}/{max_pages}          ')
     hydra.get(f'/campus/{campus}/users?page={page}&per_page=100')
 resps = hydra.get_responses()
 
@@ -46,7 +46,7 @@ for resp in resps:
 print(f'Number of accounts in 42berlin: {len(logins_42berlin)}')
 
 for i, login in enumerate(logins_42berlin):
-    print(f'Getting account data: {i+1}/{len(logins_42berlin)}')
+    print(f'\rGetting account data: {i+1}/{len(logins_42berlin)}            ')
     hydra.get(f'/users/{login}')
 resps = hydra.get_responses_as_json()
 
