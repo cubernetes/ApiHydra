@@ -28,7 +28,7 @@ hydra = FtApiHydra(
     responses_file_path_template='./output_%s_%s.json',
 )
 
-hydra.set_number_of_apps(100)
+hydra.set_number_of_apps(50)
 
 campus = 'berlin'
 max_pages = 50
@@ -45,6 +45,7 @@ for resp in resps:
 
 print(f'Number of accounts in 42berlin: {len(logins_42berlin)}')
 
+hydra.clear_responses()
 for i, login in enumerate(logins_42berlin):
     print(end=f'\rGetting account data: {i+1}/{len(logins_42berlin)}            ')
     hydra.get(f'/users/{login}')
