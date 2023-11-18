@@ -51,7 +51,7 @@ for i, login in enumerate(logins_42berlin):
 resps = hydra.get_responses_as_json()
 
 with open('output.json', 'w', encoding='utf-8') as f:
-    json.dump(resps, f, ensure_ascii=False)
+    json.dump(resps, f, indent=4, ensure_ascii=False)
 
 print(f'Done')
 
