@@ -2,3 +2,6 @@
 env/
 __pycache__/
 apps.json
+
+data/
+mymain.py
