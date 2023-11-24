@@ -2,7 +2,6 @@ beautifulsoup4==4.12.2
 certifi==2023.7.22
 charset-normalizer==3.3.1
 idna==3.4
-polars==0.19.11
 python-dotenv==1.0.0
 requests==2.31.0
 soupsieve==2.5
