@@ -172,7 +172,7 @@ class ApiHydra(ABC):
         except Exception as exc:
             self.log(f'Unhandled exception: {exc}. Sorry, all response data is now lost', FATAL)
 
-    def log(self, msg: str, log_level: int=INFO):
+    def log(self, msg: str, log_level: int=INFO, end='\n'):
         """Simpler logger. Don't apply color if file is not a terminal.
            No buffering is done.
         """
@@ -195,7 +195,7 @@ class ApiHydra(ABC):
         else:
             clr_rst = ''
             ansi = ''
-        print(f'{ansi}[{str(datetime.now())}, {self.__class__.__name__}, {logging.getLevelName(log_level):>10}] {msg}{clr_rst}', file=self.log_file, flush=True)
+        print(f'{ansi}[{str(datetime.now())}, {self.__class__.__name__}, {logging.getLevelName(log_level):>10}] {msg}{clr_rst}', end=end, file=self.log_file, flush=True)
 
     def get_next_app(self):
         """Rotate through the list of available apps uniformily across
