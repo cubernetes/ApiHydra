@@ -235,9 +235,10 @@ class ApiHydra(ABC):
                 args[0] = url
         retries = 0
         delay = 1 / len(self.apps)
+        resp = None
         while True:
             if retries > self.max_retries:
-                self.log(f'{threading.current_thread().name}: Data loss: get request to "{url}" and "{args=}", "{kwargs=}" exceeded max retries ({self.max_retries}).', ERROR)
+                self.log(f'{threading.current_thread().name}: Data loss: get request to "{url}" and "{args=}", "{kwargs=}" exceeded max retries ({self.max_retries}). Last status_code: {resp.status_code if resp is not None else "undefined"}.', ERROR)
                 return
             elif retries != 0:
                 self.number_of_retries += 1
